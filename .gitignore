@@ -1,1 +1,4 @@
-echo .env >> .gitignore
+node_modules
+dist
+.env
+.vite
