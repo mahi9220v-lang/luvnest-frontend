@@ -96,42 +96,70 @@ export default function WalletPage() {
         return;
       }
 
-      // In a real application, you would make an API call to your backend here
-      // to create a Razorpay order and get the order_id.
-      // For now, we'll implement the client-side flow.
+      // Create Razorpay order via backend
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
+      const orderResponse = await fetch(`${apiBaseUrl}/api/payments/create-order`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: plan.price,
+          planId: plan.id,
+          userId: user?.id,
+        }),
+      });
+
+      if (!orderResponse.ok) {
+        const errorData = await orderResponse.json();
+        throw new Error(errorData.error || "Failed to create order");
+      }
+
+      const orderData = await orderResponse.json();
 
       const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_YOUR_KEY_HERE", // Replace with your actual key in .env
-        amount: plan.price * 100, // Amount in paise
-        currency: "INR",
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || "rzp_test_SCTfw8pThbkJFl",
+        amount: orderData.amount,
+        currency: orderData.currency,
+        order_id: orderData.id,
         name: "LUVNEST",
         description: `Purchase ${plan.name} Plan`,
-        image: "/icons/icon-192.png", // Optional: Add your logo
+        image: "/icons/icon-192.png",
         prefill: {
           name: user?.user_metadata?.full_name || "",
           email: user?.email || "",
         },
         theme: {
-          color: "#e11d48", // Primary color (rose-600)
+          color: "#e11d48",
         },
         handler: async (response: any) => {
-          // Handle successful payment
-          // response.razorpay_payment_id
-          // response.razorpay_order_id
-          // response.razorpay_signature
-
           console.log("Payment successful:", response);
 
-          // Verify payment with your backend and update user's wallet
-          // await verifyPayment(response);
+          try {
+            const verifyResponse = await fetch(`${apiBaseUrl}/api/payments/verify-payment`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                planId: plan.id,
+                userId: user?.id,
+              }),
+            });
 
-          // Simulate successful update for UI
-          toast.success(`Successfully purchased ${plan.name} plan!`);
+            if (!verifyResponse.ok) {
+              throw new Error("Payment verification failed");
+            }
 
-          // In a real app, you'd call Supabase here to update the 'wallets' table
-          // await supabase.from('wallets').update({ ... }).eq('user_id', user.id);
-
-          fetchWallet(); // Refresh wallet data
+            toast.success(`Successfully purchased ${plan.name} plan!`);
+            fetchWallet(); // Refresh wallet data
+          } catch (error) {
+            console.error("Verification error:", error);
+            toast.error("Payment was successful but verification failed. Please contact support.");
+          }
         },
       };
 
